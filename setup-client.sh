@@ -14,7 +14,7 @@ else
 fi
 
 # Stop existing service if running
-systemctl stop ak_client
+rc-service ak_client stop || true
 
 # Function to detect main network interface
 get_main_interface() {
@@ -130,29 +130,27 @@ cd /etc/ak_monitor/
 wget -O client https://github.com/akile-network/akile_monitor/releases/latest/download/$CLIENT_FILE
 chmod 777 client
 
-# Create systemd service file
-cat > /etc/systemd/system/ak_client.service << 'EOF'
-[Unit]
-Description=AkileCloud Monitor Service
-After=network.target nss-lookup.target
-Wants=network.target
+# Create OpenRC service file
+cat > /etc/init.d/ak_client << 'EOF'
+#!/sbin/openrc-run
 
-[Service]
-User=root
-Group=root
-Type=simple
-LimitAS=infinity
-LimitRSS=infinity
-LimitCORE=infinity
-LimitNOFILE=999999999
-WorkingDirectory=/etc/ak_monitor/
-ExecStart=/etc/ak_monitor/client
-Restart=always
-RestartSec=1
+name="ak_client"
+command="/etc/ak_monitor/client"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+depend() {
+    need net
+}
 
-[Install]
-WantedBy=multi-user.target
+start_pre() {
+    # Ensure the client directory exists
+    mkdir -p /etc/ak_monitor
+}
+
 EOF
+
+# Make the OpenRC service executable
+chmod +x /etc/init.d/ak_client
 
 # Create client configuration
 cat > /etc/ak_monitor/client.json << EOF
@@ -166,12 +164,9 @@ EOF
 
 # Set proper permissions
 chmod 644 /etc/ak_monitor/client.json
-chmod 644 /etc/systemd/system/ak_client.service
 
-# Reload systemd and enable service
-systemctl daemon-reload
-systemctl enable ak_client.service
-systemctl start ak_client.service
+# Start the service using OpenRC
+rc-service ak_client start
 
 echo "Installation complete! Service status:"
-systemctl status ak_client.service
+rc-service ak_client status
